@@ -1,4 +1,5 @@
 language: scala
+script: ./.travis_scripts/validate.sh
 scala:
 - 2.11.6
 - 2.10.4
