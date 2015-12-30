@@ -71,53 +71,6 @@ trait GenericCollectionWithCommands[P <: SerializationPack with Singleton] { sel
   def runValueCommand[A <: AnyVal, R <: BoxedAnyVal[A], C <: CollectionCommand with CommandWithResult[R]](command: C with CommandWithResult[R with BoxedAnyVal[A]])(implicit writer: pack.Writer[ResolvedCollectionCommand[C]], reader: pack.Reader[R], ec: ExecutionContext): Future[A] = runner.unboxed(self, command)
 }
 
-trait BatchCommands[P <: SerializationPack] {
-  import reactivemongo.api.commands.{
-    AggregationFramework => AC,
-    CountCommand => CC,
-    DistinctCommand => DistC,
-    InsertCommand => IC,
-    UpdateCommand => UC,
-    DeleteCommand => DC,
-    DefaultWriteResult,
-    LastError,
-    ResolvedCollectionCommand,
-    FindAndModifyCommand => FMC
-  }
-
-  val pack: P
-
-  val CountCommand: CC[pack.type]
-  implicit def CountWriter: pack.Writer[ResolvedCollectionCommand[CountCommand.Count]]
-  implicit def CountResultReader: pack.Reader[CountCommand.CountResult]
-
-  val DistinctCommand: DistC[pack.type]
-  implicit def DistinctWriter: pack.Writer[ResolvedCollectionCommand[DistinctCommand.Distinct]]
-  implicit def DistinctResultReader: pack.Reader[DistinctCommand.DistinctResult]
-
-  val InsertCommand: IC[pack.type]
-  implicit def InsertWriter: pack.Writer[ResolvedCollectionCommand[InsertCommand.Insert]]
-
-  val UpdateCommand: UC[pack.type]
-  implicit def UpdateWriter: pack.Writer[ResolvedCollectionCommand[UpdateCommand.Update]]
-  implicit def UpdateReader: pack.Reader[UpdateCommand.UpdateResult]
-
-  val DeleteCommand: DC[pack.type]
-  implicit def DeleteWriter: pack.Writer[ResolvedCollectionCommand[DeleteCommand.Delete]]
-
-  val FindAndModifyCommand: FMC[pack.type]
-  implicit def FindAndModifyWriter: pack.Writer[ResolvedCollectionCommand[FindAndModifyCommand.FindAndModify]]
-  implicit def FindAndModifyReader: pack.Reader[FindAndModifyCommand.FindAndModifyResult]
-
-  val AggregationFramework: AC[pack.type]
-  implicit def AggregateWriter: pack.Writer[ResolvedCollectionCommand[AggregationFramework.Aggregate]]
-  implicit def AggregateReader: pack.Reader[AggregationFramework.AggregationResult]
-
-  implicit def DefaultWriteResultReader: pack.Reader[DefaultWriteResult]
-
-  implicit def LastErrorReader: pack.Reader[LastError]
-}
-
 /**
  * A Collection that provides default methods using a `SerializationPack`
  * (e.g. the default [[reactivemongo.api.BSONSerializationPack]]).
@@ -592,6 +545,25 @@ trait GenericCollection[P <: SerializationPack with Singleton] extends Collectio
   }
 
   /**
+   * Enables a collection for sharding and allows MongoDB to begin distributing data among shards: [[https://docs.mongodb.org/manual/reference/command/shardCollection/ shardCollection]] command.
+   *
+   * @param key the index specification document to use as the shard key
+   * @param unique when true, the unique option ensures that the underlying index enforces a unique constraint.
+   * @param numInitialChunks the number of chunks to create initially when sharding an empty collection with a hashed shard key
+   */
+  def shardCollection[T](key: T, unique: Boolean = false, numInitialChunks: Option[Int] = None)(implicit ec: ExecutionContext, writer: pack.Writer[T]): Future[Unit] = {
+    import BatchCommands.{
+      ShardCollCommand,
+      ShardCollReader,
+      ShardCollWriter
+    }, ShardCollCommand.ShardCollection
+
+    runCommand(ShardCollection(
+      db.name, pack.serialize(key, writer), unique, numInitialChunks)).
+      map(_ => {})
+  }
+
+  /**
    * Remove the matched document(s) from the collection and wait for the [[reactivemongo.api.commands.WriteResult]] result.
    *
    * Please read the documentation about [[reactivemongo.core.commands.GetLastError]] to know how to use it properly.
@@ -690,6 +662,8 @@ trait GenericCollection[P <: SerializationPack with Singleton] extends Collectio
     val message = RequestMaker(op, BufferSequence(bson))
     db.connection.send(message)
   }
+
+  // ---
 
   protected object Mongo26WriteCommand {
     def insert(ordered: Boolean, writeConcern: WriteConcern, metadata: ProtocolMetadata): Mongo26WriteCommand = new Mongo26WriteCommand("insert", ordered, writeConcern, metadata)

@@ -15,14 +15,19 @@
  */
 package reactivemongo.api.collections.bson
 
-import reactivemongo.api.{ DB, FailoverStrategy }
-import reactivemongo.api.commands.bson._
+import reactivemongo.api.{
+  Collection,
+  DB,
+  FailoverStrategy,
+  QueryOpts,
+  ReadPreference
+}
 import reactivemongo.api.collections.{
-  BatchCommands,
   GenericCollection,
   GenericCollectionProducer
 }
 import reactivemongo.api.BSONSerializationPack
+import reactivemongo.bson.{ BSONBoolean, BSONDocument, BSONLong, BSONString }
 
 object `package` {
   implicit object BSONCollectionProducer extends GenericCollectionProducer[BSONSerializationPack.type, BSONCollection] {

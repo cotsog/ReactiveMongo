@@ -45,6 +45,7 @@ object GetLastError {
 object MultiBulkWriteResult {
   def apply(): MultiBulkWriteResult =
     MultiBulkWriteResult(true, 0, 0, Seq.empty, Seq.empty, None, None, None, 0)
+
   def apply(wr: WriteResult): MultiBulkWriteResult =
     apply().merge(wr)
 }

@@ -2,6 +2,7 @@ package reactivemongo.api.commands.bson
 
 import scala.util.{ Failure, Success }
 
+import reactivemongo.api.BSONSerializationPack
 import reactivemongo.api.commands._
 import reactivemongo.bson._
 
@@ -12,6 +13,16 @@ object BSONDropDatabaseImplicits {
       extends BSONDocumentWriter[DropDatabase.type] {
     val command = BSONDocument("dropDatabase" -> 1)
     def write(dd: DropDatabase.type): BSONDocument = command
+  }
+}
+
+object BSONEnableShardingImplicits {
+  implicit object EnableShardingWriter
+      extends BSONDocumentWriter[EnableSharding] {
+
+    def write(enableSharding: EnableSharding) =
+      BSONDocument("enableSharding" -> enableSharding.database)
+
   }
 }
 
@@ -374,5 +385,26 @@ object BSONCreateUserCommand
       "digestPassword" -> create.digestPassword,
       "writeConcern" -> create.writeConcern
     )
+  }
+}
+
+object BSONShardCollCommand
+    extends ShardCollCommand[BSONSerializationPack.type] {
+  val pack = BSONSerializationPack
+}
+
+object BSONShardCollCommandImplicits {
+  import BSONShardCollCommand._
+
+  implicit object ShardCollWriter extends BSONDocumentWriter[ResolvedCollectionCommand[ShardCollection]] {
+    def write(shard: ResolvedCollectionCommand[ShardCollection]) = {
+      val command = BSONDocument(
+        "shardCollection" -> s"${shard.command.database}.${shard.collection}",
+        "key" -> shard.command.key,
+        "unique" -> shard.command.unique)
+
+      shard.command.numInitialChunks.fold(command)(
+        num => command ++ ("numInitialChunks" -> num))
+    }
   }
 }

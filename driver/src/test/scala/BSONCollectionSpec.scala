@@ -380,6 +380,12 @@ class BSONCollectionSpec extends org.specs2.mutable.Specification {
       "with the default connection" >> dropSpec(db)
       "with the slow connection" >> dropSpec(db)
     }
+
+    "be used to shard collection" in {
+      db.enableSharding().flatMap(_ =>
+        col.shardCollection(BSONDocument("token" -> "hashed"), true)).
+        aka("sharding") must beEqualTo({}).await(timeoutMillis)
+    }
   }
 
   @inline def findAll(c: BSONCollection)(implicit ec: ExecutionContext) = c.find(BSONDocument.empty)

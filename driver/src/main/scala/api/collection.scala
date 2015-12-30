@@ -134,7 +134,6 @@ trait CollectionMetaCommands { self: Collection =>
   import CommonImplicits._
   import BSONCreateImplicits._
   import BSONEmptyCappedImplicits._
-  import BSONCollStatsImplicits._
   import BSONRenameCollectionImplicits._
   import BSONConvertToCappedImplicits._
   import reactivemongo.api.indexes.CollectionIndexesManager
@@ -226,15 +225,20 @@ trait CollectionMetaCommands { self: Collection =>
   /**
    * Returns various information about this collection.
    */
-  def stats()(implicit ec: ExecutionContext): Future[CollStatsResult] =
+  def stats()(implicit ec: ExecutionContext): Future[CollStatsResult] = {
+    import BSONCollStatsImplicits._
     Command.run(BSONSerializationPack)(self, CollStats(None))
+  }
 
   /**
    * Returns various information about this collection.
    *
    * @param scale A scale factor (for example, to get all the sizes in kilobytes).
    */
-  def stats(scale: Int)(implicit ec: ExecutionContext): Future[CollStatsResult] = Command.run(BSONSerializationPack)(self, CollStats(Some(scale)))
+  def stats(scale: Int)(implicit ec: ExecutionContext): Future[CollStatsResult] = {
+    import BSONCollStatsImplicits._
+    Command.run(BSONSerializationPack)(self, CollStats(Some(scale)))
+  }
 
   /** Returns an index manager for this collection. */
   def indexesManager(implicit ec: ExecutionContext): CollectionIndexesManager =

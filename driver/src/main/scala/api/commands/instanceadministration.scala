@@ -37,7 +37,16 @@ case class ConvertToCapped(
   capped: Capped
 ) extends CollectionCommand with CommandWithResult[UnitBox.type]
 
-case class CollStats(scale: Option[Int] = None) extends CollectionCommand with CommandWithResult[CollStatsResult]
+case class CollStats(scale: Option[Int] = None)
+  extends CollectionCommand with CommandWithResult[CollStatsResult]
+
+/**
+ * The [[https://docs.mongodb.org/manual/reference/command/enableSharding/#dbcmd.enableSharding enableSharding]] command enables sharding on a per-database level.
+ *
+ * @param database the name of the database
+ */
+case class EnableSharding(database: String)
+  extends Command with CommandWithResult[UnitBox.type]
 
 /**
  * Various information about a collection.
@@ -267,5 +276,24 @@ trait CreateUserCommand[P <: SerializationPack]
     customData: Option[pack.Document] = None
   ) extends Command with CommandWithPack[P]
       with CommandWithResult[UnitBox.type]
+
+}
+
+/** [[https://docs.mongodb.org/manual/reference/command/shardCollection/ shardCollection]] */
+trait ShardCollCommand[P <: reactivemongo.api.SerializationPack]
+    extends ImplicitCommandHelpers[P] {
+
+  /**
+   * @param database the name of the database
+   * @param key the index specification document to use as the shard key
+   * @param unique when true, the unique option ensures that the underlying index enforces a unique constraint.
+   * @param numInitialChunks the number of chunks to create initially when sharding an empty collection with a hashed shard key
+   */
+  case class ShardCollection(
+    database: String,
+    key: P#Document,
+    unique: Boolean = false,
+    numInitialChunks: Option[Int] = None)
+      extends CollectionCommand with CommandWithResult[UnitBox.type]
 
 }

@@ -137,6 +137,7 @@ trait DBMetaCommands { self: DB =>
   import reactivemongo.api.commands.{
     Command,
     DropDatabase,
+    EnableSharding,
     ListCollectionNames,
     ServerStatus,
     ServerStatusResult,
@@ -235,6 +236,12 @@ trait DBMetaCommands { self: DB =>
     )
 
     Command.run(BSONSerializationPack)(self, command).map(_ => {})
+  }
+
+  /** Enables sharding on a per-database level. */
+  def enableSharding()(implicit ec: ExecutionContext): Future[Unit] = {
+    import reactivemongo.api.commands.bson.BSONEnableShardingImplicits._
+    Command.run(BSONSerializationPack).unboxed(self, EnableSharding(self.name))
   }
 }
 
