@@ -31,7 +31,7 @@ class GridFSSpec extends org.specs2.mutable.Specification {
 
   def gridFsSpec(gfs: GridFS[BSONSerializationPack.type], timeout: FiniteDuration) = {
     val filename = s"somefile${System identityHashCode gfs}"
-    lazy val file = DefaultFileToSave(Some(filename), Some("application/file"))
+    lazy val file = DefaultFileToSave(filename, Some("application/file"))
 
     lazy val fileContent = Enumerator((1 to 100).view.map(_.toByte).toArray)
 

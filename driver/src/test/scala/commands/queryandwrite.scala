@@ -23,7 +23,6 @@ class QueryAndWriteCommandSpec extends org.specs2.mutable.Specification {
 
   val colName = s"queryandwritecommandspec${System identityHashCode this}"
   lazy val collection = db(colName)
-  lazy val slowColl = slowDb(colName)
 
   "ReactiveMongo" should {
     "insert 1 doc and retrieve it" >> {
@@ -45,10 +44,6 @@ class QueryAndWriteCommandSpec extends org.specs2.mutable.Specification {
 
       "with the default connection" in { implicit ee: EE =>
         test1(collection, timeout)
-      }
-
-      "with the slow connection" in { implicit ee: EE =>
-        test1(slowColl, slowTimeout)
       }
     }
 
@@ -81,13 +76,6 @@ class QueryAndWriteCommandSpec extends org.specs2.mutable.Specification {
 
       s"$nDocs documents with the default connection" in { implicit ee: EE =>
         bulkSpec(db(newName(nDocs)), nDocs, nDocs - 3, timeout)
-      }
-
-      s"${nDocs / 1000} with the slow connection" in { implicit ee: EE =>
-        bulkSpec(
-          slowDb(newName(nDocs / 1000)),
-          nDocs / 1000, nDocs / 1000, slowTimeout
-        )
       }
     }
 

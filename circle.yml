@@ -6,8 +6,11 @@ machine:
     AKKA_VERSION: 2.4.8
     MONGO_PROFILE: "default"
     MONGO_VER: 3
-    TRAVIS_SCALA_VERSION: 2.11.8
     SBT_VER: 0.13.11
+    TRAVIS_SCALA_VERSION: 2.11.8
+    TRAVIS_JOB_ID: "$CIRCLE_SHA1"
+    TRAVIS_JOB_NUMBER: "$CIRCLE_BUILD_NUM"
+    TRAVIS_TAG: "$CIRCLE_TAG"
 dependencies:
   pre:
     - wget -q "https://dl.bintray.com/sbt/debian/sbt-$SBT_VER.deb"
@@ -24,8 +27,12 @@ dependencies:
     - "~/mongodb-linux-x86_64-amazon-3.2.8"
 test:
   override:
-  - ./.ci_scripts/retry.sh 3 ./.ci_scripts/validate.sh
+  - source .ci_scripts/jvmopts.sh
+  - sbt -Dtest.primaryHost=localhost:27018 ++$TRAVIS_SCALA_VERSION ";project ReactiveMongo-BSON ;test-only ;project ReactiveMongo-BSON-Macros ;test-only ;project ReactiveMongo ;test:compile ;startMetrics ;testOnly * -- -exclude testCommands -- ;stopMetrics"
+#  - ./.ci_scripts/retry.sh 3 ./.ci_scripts/validate.sh
 #  - cp */target/test-reports/*.xml "$CIRCLE_TEST_REPORTS"
-  post:
-  - export TRAVIS_TAG="$CIRCLE_TAG"
-  - ./.ci_scripts/afterSuccess.sh
+deployment:
+  bench:
+    branch: [ bench-0.11, bench-0.12 ]
+    commands:
+      - ./.ci_scripts/afterSuccess.sh

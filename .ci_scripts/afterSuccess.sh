@@ -1,23 +1,30 @@
-#! /bin/sh
+#! /bin/bash
 
-SCRIPT_DIR=`dirname $0`
-JAVA_COMPAT=`javac -version 2>&1 | grep 1.7 | wc -l`
+COL="metrics"
+LOAD=`uptime | sed -e 's/^.*:[ \t]*//;s/,//g'`
+UPA=`echo "$LOAD" | cut -d ' ' -f 1`
+UPB=`echo "$LOAD" | cut -d ' ' -f 2`
+UPC=`echo "$LOAD" | cut -d ' ' -f 3`
+MEM=`find . -type f -name 'metrics.out' -exec cat {} \;`
 
-killall -9 mongod
+KEY="$TRAVIS_JOB_ID-$TRAVIS_JOB_NUMBER."`date '+%s'`
+JSON=`grep '<testsuite ' */target/test-reports/*.xml | perl -pe 's/^.+name="//;s/".+time="/":"/;s/^/"/;s/>$//' | awk 'BEGIN { printf(","); i = 0; } { if (i > 0) printf(","); i = i + 1; printf($0); } END { printf("}\n") }' | sed -e "s/^,/{\"version\":\"0.12\",\"freeMem\":$MEM,\"load1m\":$UPA,\"load5m\":$UPB,\"load15m\":$UPC,\"akka\":\"$AKKA_VERSION\",\"dbprofile\":\"$MONGO_PROFILE\",\"mongodb\":\"$MONGO_VER\",/"`
 
-rm -rf "$HOME/.ivy2/cache/org.reactivemongo/"
+cat > /dev/stdout <<EOF
+-----
+# Push to the metrics collection
+#
+# key: $KEY
+-----
 
-if [ ! "x$TRAVIS_TAG" = "x" -o "$MONGO_SSL" = "false" -o "x$SONATYPE_USER" = "x" -o "x$SONATYPE_PASS" = "x" -o $JAVA_COMPAT -ne 1 ]; then
-    echo -n "\nINFO: Skip the snapshot publication: $JAVA_COMPAT\n"
-    exit 0
-fi
+$JSON
 
-cd "$SCRIPT_DIR/.."
+-----
+EOF
 
-export PUBLISH_REPO_NAME="Sonatype Nexus Repository Manager"
-export PUBLISH_REPO_URL="https://oss.sonatype.org/content/repositories/snapshots"
-export PUBLISH_REPO_ID="oss.sonatype.org"
-export PUBLISH_USER="$SONATYPE_USER"
-export PUBLISH_PASS="$SONATYPE_PASS"
-
-sbt ';+publish ;project ReactiveMongo-JMX ;+publish'
+curl -i "https://api.orchestrate.io/v0/$COL/$KEY" \
+  -XPUT \
+  -u "$ORCHESTRATE_AUTH:" \
+  -H 'If-None-Match: "*"' \
+  -H "Content-Type: application/json" \
+  -d "$JSON"

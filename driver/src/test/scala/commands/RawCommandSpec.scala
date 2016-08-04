@@ -28,10 +28,6 @@ class RawCommandSpec extends org.specs2.mutable.Specification {
     "be found with the default connection" in { implicit ee: EE =>
       collection.create() must beEqualTo({}).await(1, timeout)
     }
-
-    "be found with the slow connection" in { implicit ee: EE =>
-      slowDb(colName).create() must beEqualTo({}).await(1, slowTimeout)
-    }
   }
 
   "Raw command" should {
@@ -48,10 +44,6 @@ class RawCommandSpec extends org.specs2.mutable.Specification {
 
       "with the default connection" in { implicit ee: EE =>
         reindexSpec(collection, timeout)
-      }
-
-      "with the slow connection" in { implicit ee: EE =>
-        reindexSpec(slowDb(collection.name), slowTimeout)
       }
     }
   }

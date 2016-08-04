@@ -10,7 +10,10 @@ import reactivemongo.api.{
 }
 
 object Common {
-  val logger = reactivemongo.util.LazyLogger("tests")
+  val logger = new {
+    def warn(msg: String) = println(s"[WARN] $msg")
+    def debug(msg: String, e: Throwable) = println(s"[DEBUG] $msg; $e")
+  }
 
   val replSetOn =
     Option(System getProperty "test.replicaSet").fold(false) {
@@ -70,7 +73,7 @@ object Common {
 
   // ---
 
-  val slowFailover = {
+  /* val slowFailover = {
     val retries = Option(System getProperty "test.slowFailoverRetries").
       fold(20)(_.toInt)
 
@@ -130,7 +133,7 @@ object Common {
     proxy
   }
 
-  lazy val slowConnection = driver.connection(List(slowPrimary), SlowOptions)
+  lazy val slowConnection = driver.connection(List(slowPrimary), SlowOptions) */
 
   lazy val (db, slowDb) = {
     import ExecutionContext.Implicits.global
@@ -138,9 +141,9 @@ object Common {
     val _db = connection.database(commonDb, failoverStrategy).
       flatMap { d => d.drop.map(_ => d) }
 
-    Await.result(_db, timeout) -> Await.result(
+    Await.result(_db, timeout) -> {} /* Await.result(
       slowConnection.database(commonDb, slowFailover), slowTimeout
-    )
+    ) */
   }
 
   @annotation.tailrec
@@ -167,6 +170,6 @@ object Common {
       }
     }
 
-    slowProxy.stop()
+    //slowProxy.stop()
   }
 }

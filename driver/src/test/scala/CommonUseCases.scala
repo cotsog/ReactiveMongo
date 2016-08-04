@@ -18,7 +18,6 @@ class CommonUseCases extends Specification {
 
   val colName = s"commonusecases${System identityHashCode this}"
   lazy val collection = db(colName)
-  lazy val slowColl = slowDb(colName)
 
   "ReactiveMongo" should {
     "create a collection" in { implicit ee: EE =>
@@ -87,10 +86,6 @@ class CommonUseCases extends Specification {
 
       "with the default connection" in { implicit ee: EE =>
         findSpec(collection, timeout)
-      }
-
-      "with the slow connection" in { implicit ee: EE =>
-        findSpec(slowColl, slowTimeout)
       }
     }
 
