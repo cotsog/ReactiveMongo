@@ -1,114 +1,101 @@
-import scala.util.{ Failure, Success, Try }
+import reactivemongo.api.{
+  MongoConnection,
+  MongoConnectionOptions
+}, MongoConnection.{ ParsedURI, parseURI }
 
-import org.specs2.mutable._
-
-import reactivemongo.api._
-import reactivemongo.api.MongoConnection.ParsedURI
 import reactivemongo.core.nodeset.Authenticate
+import reactivemongo.api.commands.WriteConcern
 
-class MongoURISpec extends Specification {
+class MongoURISpec extends org.specs2.mutable.Specification {
+  "Mongo URI" title
 
+  section("unit")
   "MongoConnection URI parser" should {
     val simplest = "mongodb://host1"
-    s"parse $simplest with success" in {
-      val p = MongoConnection.parseURI(simplest)
-      p mustEqual Success(
-        ParsedURI(
-          hosts = List("host1" -> 27017),
-          db = None,
-          authenticate = None,
-          options = MongoConnectionOptions(),
-          ignoredOptions = List()))
-    }
 
-    val withOpts = "mongodb://host1?foo=bar"
-    s"parse $withOpts with success" in {
-      val p = MongoConnection.parseURI(withOpts)
-      p mustEqual Success(
+    s"parse $simplest with success" in {
+      parseURI(simplest) must beSuccessfulTry(
         ParsedURI(
           hosts = List("host1" -> 27017),
           db = None,
           authenticate = None,
           options = MongoConnectionOptions(),
-          ignoredOptions = List("foo")))
+          ignoredOptions = List()
+        )
+      )
     }
 
     val withPort = "mongodb://host1:27018"
     s"parse $withPort with success" in {
-      val p = MongoConnection.parseURI(withPort)
-      p mustEqual Success(
+      parseURI(withPort) must beSuccessfulTry(
         ParsedURI(
           hosts = List("host1" -> 27018),
           db = None,
           authenticate = None,
           options = MongoConnectionOptions(),
-          ignoredOptions = List()))
+          ignoredOptions = List()
+        )
+      )
     }
 
     val withWrongPort = "mongodb://host1:68903"
     s"parse $withWrongPort with failure" in {
-      val p = MongoConnection.parseURI(withWrongPort)
-      p.isFailure mustEqual true
+      parseURI(withWrongPort).isFailure must beTrue
     }
 
     val withWrongPort2 = "mongodb://host1:kqjbce"
     s"parse $withWrongPort2 with failure" in {
-      val p = MongoConnection.parseURI(withWrongPort2)
-      p.isFailure mustEqual true
+      parseURI(withWrongPort2).isFailure must beTrue
     }
 
     val withDb = "mongodb://host1/somedb"
     s"parse $withDb with success" in {
-      val p = MongoConnection.parseURI(withDb)
-      p mustEqual Success(
+      parseURI(withDb) must beSuccessfulTry(
         ParsedURI(
           hosts = List("host1" -> 27017),
           db = Some("somedb"),
           authenticate = None,
           options = MongoConnectionOptions(),
-          ignoredOptions = List()))
+          ignoredOptions = List()
+        )
+      )
     }
 
     val withAuth = "mongodb://user123:passwd123@host1/somedb"
     s"parse $withAuth with success" in {
-      val p = MongoConnection.parseURI(withAuth)
-      p mustEqual Success(
+      parseURI(withAuth) must beSuccessfulTry(
         ParsedURI(
           hosts = List("host1" -> 27017),
           db = Some("somedb"),
           authenticate = Some(Authenticate("somedb", "user123", "passwd123")),
           options = MongoConnectionOptions(),
-          ignoredOptions = List()))
+          ignoredOptions = List()
+        )
+      )
     }
 
     val wrongWithAuth = "mongodb://user123:passwd123@host1"
     s"parse $wrongWithAuth with failure" in {
-      val p = MongoConnection.parseURI(wrongWithAuth)
-      p.isFailure mustEqual true
+      parseURI(wrongWithAuth).isFailure must beTrue
     }
 
-    val fullFeatured = "mongodb://user123:passwd123@host1:27018,host2:27019,host3:27020/somedb?foo=bar"
-    s"parse $fullFeatured with success" in {
-      val p = MongoConnection.parseURI(fullFeatured)
-      p mustEqual Success(
-        ParsedURI(
-          hosts = List("host1" -> 27018, "host2" -> 27019, "host3" -> 27020),
-          db = Some("somedb"),
-          authenticate = Some(Authenticate("somedb", "user123", "passwd123")),
-          options = MongoConnectionOptions(),
-          ignoredOptions = List("foo")))
+    val invalidMonRef1 = "mongodb://host1?rm.monitorRefreshMS=A"
+
+    s"fail to parse $invalidMonRef1" in {
+      parseURI(invalidMonRef1) must beSuccessfulTry[ParsedURI].like {
+        case uri =>
+          uri.ignoredOptions.headOption must beSome("rm.monitorRefreshMS")
+      }
     }
 
-    val withAuthParamAndSource = "mongodb://user123:passwd123@host1:27018,host2:27019,host3:27020/somedb?foo=bar&authSource=authdb"
-    s"parse $withAuthParamAndSource with success" in {
-      val p = MongoConnection.parseURI(withAuthParamAndSource)
-      p mustEqual Success(
-        ParsedURI(
-          hosts = List("host1" -> 27018, "host2" -> 27019, "host3" -> 27020),
-          db = Some("somedb"),
-          authenticate = Some(Authenticate("authdb", "user123", "passwd123")),
-          options = MongoConnectionOptions(authSource = Some("authdb")),
-          ignoredOptions = List("foo")))
+    val invalidMonRef2 = "mongodb://host1?rm.monitorRefreshMS=50"
+
+    s"fail to parse $invalidMonRef2 (monitorRefreshMS < 100)" in {
+      parseURI(invalidMonRef2) must beSuccessfulTry[ParsedURI].like {
+        case uri =>
+          uri.ignoredOptions.headOption must beSome("rm.monitorRefreshMS")
+      }
     }
   }
+  section("unit")
 }

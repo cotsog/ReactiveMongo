@@ -1,28 +1,32 @@
-import Common._
-import org.specs2.mutable._
+import scala.concurrent.duration.FiniteDuration
+
+import reactivemongo.api.commands.{ UpdateWriteResult, Upserted }
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.commands.bson.BSONUpdateCommand._
 import reactivemongo.api.commands.bson.BSONUpdateCommandImplicits._
 import reactivemongo.bson._
 
-import scala.concurrent._
+import org.specs2.concurrent.{ ExecutionEnv => EE }
 
-class UpdateSpec extends Specification {
+class UpdateSpec extends org.specs2.mutable.Specification {
+  "Update" title
 
   sequential
 
-  val collection: BSONCollection = db("UpdateSpec")
+  import Common._
 
-  case class Person(firstName: String,
-                    lastName: String,
-                    age: Int)
+  lazy val col1 = db(s"update1${System identityHashCode db}")
+  lazy val col2 = db(s"update2${System identityHashCode slowDb}")
+
+  case class Person(firstName: String, lastName: String, age: Int)
 
   implicit object PersonReader extends BSONDocumentReader[Person] {
     def read(doc: BSONDocument): Person =
       Person(
         doc.getAs[String]("firstName").getOrElse(""),
         doc.getAs[String]("lastName").getOrElse(""),
-        doc.getAs[Int]("age").getOrElse(0))
+        doc.getAs[Int]("age").getOrElse(0)
+      )
   }
 
   implicit object PersonWriter extends BSONDocumentWriter[Person] {
@@ -35,48 +39,67 @@ class UpdateSpec extends Specification {
   }
 
   "Update" should {
-    "upsert a doc" in {
-      val jack = Person("Jack", "London", 27)
-      val result = Await.result(
-        collection.runCommand(Update(UpdateElement(
-          q = jack,
-          u = BSONDocument("$set" -> BSONDocument("age" -> 33)),
-          upsert = true))),
-        timeout
-      )
+    {
+      def spec(c: BSONCollection, timeout: FiniteDuration)(implicit ee: EE) = {
+        val jack = Person("Jack", "London", 27)
 
-      result.upserted must have size (1)
+        c.update(jack, BSONDocument("$set" -> BSONDocument("age" -> 33)),
+          upsert = true).map(_ => {}) must beEqualTo({}).await(1, timeout)
 
-      val upserted = Await.result(
-        collection.find(BSONDocument("_id" -> result.upserted(0)._id.asInstanceOf[Option[BSONObjectID]])).one[Person],
-        timeout
-      )
+      }
 
-      upserted must beSome
-      upserted.get.firstName mustEqual "Jack"
-      upserted.get.lastName mustEqual "London"
-      upserted.get.age mustEqual 33
+      "upsert a person with the default connection" in { implicit ee: EE =>
+        spec(col1, timeout)
+      }
     }
 
-    "update a doc" in {
-      val jack = Person("Jack", "London", 33)
-      val result = Await.result(
-        collection.runCommand(Update(UpdateElement(
-          q = jack,
-          u = BSONDocument("$set" -> BSONDocument("age" -> 66))))),
-        timeout
-      )
+    {
+      def spec(c: BSONCollection, timeout: FiniteDuration)(implicit ee: EE) = {
+        val doc = BSONDocument("_id" -> "foo", "bar" -> 2)
 
-      result.nModified mustEqual 1
+        c.update(BSONDocument.empty, doc, upsert = true).
+          map(_ => {}) must beEqualTo({}).await(1, timeout)
+      }
 
-      val updated = Await.result(
-        collection.find(BSONDocument("age" -> 66)).one[Person],
-        timeout
-      )
+      "upsert a document with the default connection" in { implicit ee: EE =>
+        spec(col2, timeout)
+      }
+    }
 
-      updated must beSome
-      updated.get.firstName mustEqual "Jack"
-      updated.get.lastName mustEqual "London"
+    {
+      def spec(c: BSONCollection, timeout: FiniteDuration)(implicit ee: EE) = {
+        val jack = Person("Jack", "London", 33)
+
+        c.runCommand(Update(UpdateElement(
+          q = jack, u = BSONDocument("$set" -> BSONDocument("age" -> 66))
+        ))).
+          aka("result") must beLike[UpdateWriteResult]({
+            case result => result.nModified mustEqual 1 and (
+              c.find(BSONDocument("age" -> 66)).
+              one[Person] must beSome(jack.copy(age = 66)).await(1, timeout)
+            )
+          }).await(1, timeout)
+      }
+
+      "update a person with the default connection" in { implicit ee: EE =>
+        spec(col1, timeout)
+      }
+    }
+
+    "update a document" in { implicit ee: EE =>
+      val doc = BSONDocument("_id" -> "foo", "bar" -> 2)
+
+      col2.runCommand(Update(UpdateElement(
+        q = doc, u = BSONDocument("$set" -> BSONDocument("bar" -> 3))
+      ))).
+        aka("result") must beLike[UpdateWriteResult]({
+          case result => result.nModified must_== 1 and (
+            col2.find(BSONDocument("_id" -> "foo")).one[BSONDocument].
+            aka("updated") must beSome(BSONDocument(
+              "_id" -> "foo", "bar" -> 3
+            )).await(1, timeout)
+          )
+        }).await(1, timeout)
     }
   }
 }

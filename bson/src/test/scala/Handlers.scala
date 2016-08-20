@@ -31,9 +31,12 @@ class Handlers extends Specification {
       "emails" -> BSONArray(
         Some("james@example.org"),
         None,
-        Some("spamaddrjames@example.org")),
-      "adress" -> BSONString("coucou")),
-    "lastSeen" -> BSONLong(1360512704747L))
+        Some("spamaddrjames@example.org")
+      ),
+      "adress" -> BSONString("coucou")
+    ),
+    "lastSeen" -> BSONLong(1360512704747L)
+  )
 
   val array = BSONArray(
     BSONString("elem0"),
@@ -41,9 +44,11 @@ class Handlers extends Specification {
     1,
     2.222,
     BSONDocument(
-      "name" -> "Joe"),
+      "name" -> "Joe"
+    ),
     BSONArray(0L),
-    "pp[4]")
+    "pp[4]"
+  )
 
   "Complex Document" should {
     "have a name == 'James'" in {
@@ -124,11 +129,13 @@ class Handlers extends Specification {
   case class Album(
     name: String,
     releaseYear: Int,
-    tracks: List[String])
+    tracks: List[String]
+  )
 
   case class Artist(
     name: String,
-    albums: List[Album])
+    albums: List[Album]
+  )
 
   val neilYoung = Artist(
     "Neil Young",
@@ -143,25 +150,32 @@ class Handlers extends Specification {
           "Down By the River",
           "Losing End (When You're On)",
           "Running Dry (Requiem For the Rockets)",
-          "Cowgirl in the Sand"))))
+          "Cowgirl in the Sand"
+        )
+      )
+    )
+  )
 
   implicit object AlbumHandler extends BSONDocumentWriter[Album] with BSONDocumentReader[Album] {
     def write(album: Album) = BSONDocument(
       "name" -> album.name,
       "releaseYear" -> album.releaseYear,
-      "tracks" -> album.tracks)
+      "tracks" -> album.tracks
+    )
 
     def read(doc: BSONDocument) = Album(
       doc.getAs[String]("name").get,
       doc.getAs[Int]("releaseYear").get,
-      doc.getAs[List[String]]("tracks").get)
+      doc.getAs[List[String]]("tracks").get
+    )
   }
 
   implicit object ArtistHandler extends BSONDocumentWriter[Artist] with BSONDocumentReader[Artist] {
     def write(artist: Artist) =
       BSONDocument(
         "name" -> artist.name,
-        "albums" -> artist.albums)
+        "albums" -> artist.albums
+      )
 
     def read(doc: BSONDocument) = {
       Artist(doc.getAs[String]("name").get, doc.getAs[List[Album]]("albums").get)
@@ -171,24 +185,8 @@ class Handlers extends Specification {
   "Neil Young" should {
     "produce the expected BSONDocument" in {
       val doc = BSON.write(neilYoung)
-      BSONDocument.pretty(doc) mustEqual """{
-  name: BSONString(Neil Young),
-  albums: [
-    0: {
-      name: BSONString(Everybody Knows this is Nowhere),
-      releaseYear: BSONInteger(1969),
-      tracks: [
-        0: BSONString(Cinnamon Girl),
-        1: BSONString(Everybody Knows this is Nowhere),
-        2: BSONString(Round & Round (it Won't Be Long)),
-        3: BSONString(Down By the River),
-        4: BSONString(Losing End (When You're On)),
-        5: BSONString(Running Dry (Requiem For the Rockets)),
-        6: BSONString(Cowgirl in the Sand)
-      ]
-    }
-  ]
-}""".replaceAll("\r", "")
+      BSONDocument.pretty(doc)
+
       val ny2 = BSON.readDocument[Artist](doc)
       val allSongs = doc.getAs[List[Album]]("albums").getOrElse(List.empty).flatMap(_.tracks)
       allSongs mustEqual List(
@@ -198,7 +196,8 @@ class Handlers extends Specification {
         "Down By the River",
         "Losing End (When You're On)",
         "Running Dry (Requiem For the Rockets)",
-        "Cowgirl in the Sand")
+        "Cowgirl in the Sand"
+      )
       ny2 mustEqual neilYoung
       success
     }

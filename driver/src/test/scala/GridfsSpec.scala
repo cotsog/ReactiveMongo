@@ -1,46 +1,70 @@
-import org.specs2.mutable._
+import scala.concurrent.Future
+import scala.concurrent.duration.FiniteDuration
+
 import play.api.libs.iteratee._
-import reactivemongo.api._
-import reactivemongo.api.gridfs.{ReadFile, DefaultFileToSave, GridFS}
+
+import reactivemongo.api.BSONSerializationPack
+import reactivemongo.api.gridfs.{ ReadFile, DefaultFileToSave, GridFS }
 import reactivemongo.api.gridfs.Implicits._
 import reactivemongo.bson._
-import scala.concurrent._
-import reactivemongo.api.gridfs
-import scala.concurrent.duration._
 
-class GridfsSpec extends Specification {
+import org.specs2.concurrent.{ ExecutionEnv => EE }
+
+class GridFSSpec extends org.specs2.mutable.Specification {
+  "GridFS" title
+
   import Common._
 
   sequential
 
-  lazy val gfs = GridFS(db)
+  "Default connection" should {
+    gridFsSpec(GridFS[BSONSerializationPack.type](db), timeout)
+  }
 
-  lazy val file = DefaultFileToSave("somefile", Some("application/file"))
-  lazy val fileContent = Enumerator((1 to 100).view.map(_.toByte).toArray)
+  "Slow connection" should {
+    gridFsSpec(GridFS[BSONSerializationPack.type](db), timeout)
+  }
 
-  "ReactiveMongo" should {
+  // ---
 
-    "store a file in gridfs" in {
-      val actual = Await.result(gfs.save(fileContent, file), timeout)
-      actual.filename mustEqual "somefile"
+  type GFile = ReadFile[BSONSerializationPack.type, BSONValue]
+
+  def gridFsSpec(gfs: GridFS[BSONSerializationPack.type], timeout: FiniteDuration) = {
+    val filename = s"somefile${System identityHashCode gfs}"
+    lazy val file = DefaultFileToSave(filename, Some("application/file"))
+
+    lazy val fileContent = Enumerator((1 to 100).view.map(_.toByte).toArray)
+
+    "store a file" in { implicit ee: EE =>
+      gfs.save(fileContent, file).map(_.filename).
+        aka("filename") must beEqualTo(filename).await(1, timeout)
     }
 
-    "find this file in gridfs" in {
-      val futureFile = gfs.find(BSONDocument("filename" -> "somefile")).collect[List]()
-      val actual = Await.result(futureFile, timeout).head
-      (actual.filename mustEqual file.filename) and
-      (actual.uploadDate must beSome) and
-      (actual.contentType mustEqual file.contentType)
-      import scala.collection.mutable.ArrayBuilder
-      val res = Await.result(gfs.enumerate(actual) |>>> Iteratee.fold(ArrayBuilder.make[Byte]()) { (result, arr) =>
-        result ++= arr
-      }, timeout)
-      res.result mustEqual ((1 to 100).map(_.toByte).toArray)
+    "find this file" in { implicit ee: EE =>
+      def f: Future[Option[GFile]] =
+        gfs.find(BSONDocument("filename" -> filename)).headOption
+
+      f must beSome[GFile].which { actual =>
+        actual.filename mustEqual file.filename and (
+          actual.uploadDate must beSome
+        ) and (
+            actual.contentType mustEqual file.contentType
+          ) and {
+              import scala.collection.mutable.ArrayBuilder
+              def res = gfs.enumerate(actual) |>>>
+                Iteratee.fold(ArrayBuilder.make[Byte]()) { (result, arr) =>
+                  result ++= arr
+                }
+
+              res.map(_.result()) must beEqualTo(
+                (1 to 100).map(_.toByte).toArray
+              ).await(1, timeout)
+            }
+      }.await(1, timeout)
     }
 
-    "delete this file from gridfs" in {
-      val actual = Await.result(gfs.remove(file.id), timeout)
-      actual.n mustEqual 1
+    "delete this file from GridFS" in { implicit ee: EE =>
+      gfs.remove(file.id).map(_.n) must beEqualTo(1).await(1, timeout)
     }
   }
 }

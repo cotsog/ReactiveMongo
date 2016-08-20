@@ -1,11 +1,11 @@
-//import play.api.libs.iteratee.Enumerator
-import scala.concurrent._
-import scala.util.{ Try, Failure }
+import scala.concurrent.duration.FiniteDuration
 
 import reactivemongo.api._
 import reactivemongo.bson._
 import reactivemongo.api.commands.Command
 import reactivemongo.api.commands.bson._
+import reactivemongo.api.collections.bson.BSONCollection
+
 import BSONCommonWriteCommandsImplicits._
 import BSONInsertCommand._
 import BSONInsertCommandImplicits._
@@ -13,86 +13,77 @@ import BSONCountCommand._
 import BSONCountCommandImplicits._
 import BSONIsMasterCommand._
 import BSONIsMasterCommandImplicits._
-//import InsertCommandImplicits._
-//import BSONGetLastErrorImplicits.LastErrorReader
 
-object QueryAndWriteCommands extends org.specs2.mutable.Specification {
+import org.specs2.concurrent.{ ExecutionEnv => EE }
+
+class QueryAndWriteCommandSpec extends org.specs2.mutable.Specification {
   import Common._
 
   sequential
 
-  lazy val collection = db("queryandwritecommandsspec")
+  val colName = s"queryandwritecommandspec${System identityHashCode this}"
+  lazy val collection = db(colName)
 
   "ReactiveMongo" should {
-    "insert 1 doc and retrieve it" in {
+    "insert 1 doc and retrieve it" >> {
       val doc = BSONDocument("_id" -> BSONNull, "name" -> "jack", "plop" -> -1)
-      val lastError = Await.result(Command.run(BSONSerializationPack)(collection,Insert(doc, doc)), timeout)
-      println(lastError)
-      lastError.ok mustEqual true
-      /*val lastError2 = Await.result(Command.run(BSONSerializationPack)(collection,Insert(true)(doc)), timeout)
-      println(lastError2)
-      lastError2.ok mustEqual true*/
-      val found = Await.result(collection.find(doc).cursor[BSONDocument].collect[List](), timeout)
-      found.size mustEqual 1
-      val count = Await.result(Command.run(BSONSerializationPack).unboxed(collection,Count(BSONDocument())), timeout)
-      count mustEqual 1
+      def test1(c: BSONCollection, timeout: FiniteDuration)(implicit ee: EE) = {
+        Command.run(BSONSerializationPack)(collection, Insert(doc, doc)).
+          map(_.ok) aka "inserted" must beTrue.await(1, timeout) and {
+            collection.find(doc).cursor[BSONDocument]().
+              collect[List]().map(_.size) must beEqualTo(1).await(1, timeout)
+          } and {
+            Command.run(BSONSerializationPack).
+              unboxed(collection, Count(BSONDocument())) must beEqualTo(1).
+              await(1, timeout)
+          } and {
+            Command.run(BSONSerializationPack)(db, IsMaster).map(_ => {}).
+              aka("isMaster") must beEqualTo({}).await(1, timeout)
+          }
+      }
 
-      val ismaster = Await.result(Command.run(BSONSerializationPack)(db, IsMaster), timeout)
-      println(ismaster)
-      ok
-    } tag ("mongo2_6")
-    "insert 1 doc with collection.insert and retrieve it" in {
-      val doc = BSONDocument("name" -> "joe", "plop" -> -2)
-      val lastError = Await.result(collection.insert(doc), timeout)
-      println(lastError)
-      lastError.ok mustEqual true
-      /*val lastError2 = Await.result(Command.run(BSONSerializationPack)(collection,Insert(true)(doc)), timeout)
-      println(lastError2)
-      lastError2.ok mustEqual true*/
-      val found = Await.result(collection.find(doc).cursor[BSONDocument].collect[List](), timeout)
-      found.size mustEqual 1
-    }
-  }
-
-  import reactivemongo.api.collections.bson._
-  import scala.concurrent.duration._
-
-  val nDocs = 1000000
-  "ReactiveMongo with new colls" should {
-    "insert 1 doc and retrieve it" in {
-      val coll = BSONCollection(db, "queryandwritecommandsspec", collection.failoverStrategy)
-      val doc = BSONDocument("name" -> "Stephane")
-      val lastError = Await.result(coll.insert(doc), timeout)
-      println(lastError)
-      lastError.ok mustEqual true
-      val list = Await.result(coll.find(doc).cursor[BSONDocument].collect[List](), timeout)
-      println(list)
-      list.size mustEqual 1
+      "with the default connection" in { implicit ee: EE =>
+        test1(collection, timeout)
+      }
     }
 
-    s"Insert $nDocs in bulks (including 3 duplicate errors)" in {
+    val nDocs = 1000000
+    s"insert with bulks (including 3 duplicate errors)" >> {
       import reactivemongo.api.indexes._
       import reactivemongo.api.indexes.IndexType.Ascending
-      val created = collection.indexesManager.ensure(Index(List("plop" -> Ascending), unique = true))
-      Await.result(created, timeout)
-      val start = System.currentTimeMillis
-      val coll = BSONCollection(db, "queryandwritecommandsspec", collection.failoverStrategy)
-      val docs = (0 until nDocs).toStream.map { i =>
-        if (i == 0 || i == 1529 || i == 3026 || i == 19862) {
-          BSONDocument("bulk" -> true, "i" -> i, "plop" -> -3)
-        } else BSONDocument("bulk" -> true, "i" -> i, "plop" -> i)
-      }
-      val res = Try(Await.result(coll.bulkInsert(docs, false), DurationInt(100).seconds))
-      println(res)
-      if (res.isFailure) {
-        throw res.failed.get
-      }
-      //println(s"writeErrors: ${res.get.map(_.writeErrors)}")
-      //println(s"writeConcernError: ${res.get.map(_.writeConcernError)}")
-      println(s"took ${System.currentTimeMillis - start} ms")
-      val count = Await.result(Command.run(BSONSerializationPack).unboxed(collection,Count(BSONDocument("bulk" -> true))), timeout)
-      count mustEqual (nDocs - 3) // all docs minus errors
-    } tag ("mongo2_6")
-  }
 
+      def bulkSpec(c: BSONCollection, n: Int, e: Int, timeout: FiniteDuration)(implicit ee: EE) = {
+        @inline def docs = (0 until n).toStream.map { i =>
+          if (i == 0 || i == 1529 || i == 3026 || i == 19862) {
+            BSONDocument("bulk" -> true, "i" -> i, "plop" -> -3)
+          } else BSONDocument("bulk" -> true, "i" -> i, "plop" -> i)
+        }
+
+        c.indexesManager.ensure(
+          Index(List("plop" -> Ascending), unique = true)
+        ).map(_ => {}).
+          aka("index") must beEqualTo({}).await(1, timeout) and {
+            c.bulkInsert(docs, false).map(_ => {}) must beEqualTo({}).
+              await(1, timeout * (n / 2)) and {
+                c.count(Some(BSONDocument("bulk" -> true))).
+                  aka("count") must beEqualTo(e).await(1, timeout)
+                // all docs minus errors
+              }
+          }
+      }
+
+      def newName(n: Int) = s"queryandwritecommandsspec$n"
+
+      s"$nDocs documents with the default connection" in { implicit ee: EE =>
+        bulkSpec(db(newName(nDocs)), nDocs, nDocs - 3, timeout)
+      }
+    }
+
+    "insert from an empty bulk of docs" in { implicit ee: EE =>
+      val docs = Stream.empty[BSONDocument]
+
+      collection.bulkInsert(docs, ordered = true).map(_.n) must beEqualTo(0).
+        await(1, timeout)
+    }
+  }
 }
