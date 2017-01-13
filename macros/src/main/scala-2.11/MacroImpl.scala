@@ -8,31 +8,42 @@ import scala.reflect.macros.whitebox.Context
 
 private object MacroImpl {
   def reader[A: c.WeakTypeTag, Opts: c.WeakTypeTag](c: Context): c.Expr[BSONDocumentReader[A]] = c.universe.reify(new BSONDocumentReader[A] {
+    val typeNaming = identity[String](_)
+
     lazy val forwardReader: BSONDocumentReader[A] =
       BSONDocumentReader[A](this.read _)
 
-    def read(document: BSONDocument) = Helper[A, Opts](c).readBody.splice
+    def read(document: BSONDocument): A = 
+      Helper[A, Opts](c).readBody(typeNaming).splice
   })
 
   def writer[A: c.WeakTypeTag, Opts: c.WeakTypeTag](c: Context): c.Expr[BSONDocumentWriter[A]] = c.universe.reify(new BSONDocumentWriter[A] {
+    val typeNaming = identity[String](_)
+
     lazy val forwardWriter: BSONDocumentWriter[A] =
       BSONDocumentWriter[A](this.write _)
 
-    def write(document: A) = Helper[A, Opts](c).writeBody.splice
+    def write(document: A): BSONDocument =
+      Helper[A, Opts](c).writeBody(c.universe.reify(typeNaming)).splice
   })
 
   def handler[A: c.WeakTypeTag, Opts: c.WeakTypeTag](c: Context): c.Expr[BSONDocumentHandler[A]] = {
     val helper = Helper[A, Opts](c)
 
     c.universe.reify(new BSONDocumentReader[A] with BSONDocumentWriter[A] with BSONHandler[BSONDocument, A] {
+      val typeNaming = identity[String](_)
+
       lazy val forwardReader: BSONDocumentReader[A] =
         BSONDocumentReader[A](this.read _)
 
       lazy val forwardWriter: BSONDocumentWriter[A] =
         BSONDocumentWriter[A](this.write _)
 
-      def read(document: BSONDocument): A = helper.readBody.splice
-      def write(document: A): BSONDocument = helper.writeBody.splice
+      def read(document: BSONDocument): A =
+        helper.readBody(typeNaming).splice
+
+      def write(document: A): BSONDocument =
+        helper.writeBody(c.universe.reify(typeNaming)).splice
     })
   }
 
@@ -53,16 +64,17 @@ private object MacroImpl {
     private val writerType: Type = typeOf[Writer[_]].typeConstructor
     private val readerType: Type = typeOf[Reader[_]].typeConstructor
 
-    lazy val readBody: c.Expr[A] = {
+    def readBody(typeNaming: String => String): c.Expr[A] = {
       val reader = unionTypes.map { types =>
         val resolve = resolver(Map.empty, "Reader")(readerType)
         val cases = types map { typ =>
-          val pattern = if (hasOption[SaveSimpleName])
-            Literal(Constant(typ.typeSymbol.name.decodedName.toString))
-          else
-            Literal(Constant(typ.typeSymbol.fullName)) //todo
+          val dis = if (hasOption[SaveSimpleName]) {
+            typ.typeSymbol.name.decodedName.toString
+          } else typ.typeSymbol.fullName
 
+          val pattern = Literal(Constant(typeNaming(dis)))
           val body = readBodyFromImplicit(typ)(resolve)
+
           cq"$pattern => $body"
         }
         val className = q"""document.getAs[String]("className").get"""
@@ -79,15 +91,15 @@ private object MacroImpl {
       result
     }
 
-    lazy val writeBody: c.Expr[BSONDocument] = {
+    def writeBody(typeNaming: c.Expr[String => String]): c.Expr[BSONDocument] = {
       val writer = unionTypes.map { types =>
         val resolve = resolver(Map.empty, "Writer")(writerType)
         val cases = types.map { typ =>
           val body = writeBodyFromImplicit(typ)(resolve)
-          cq"document: $typ => $body"
+          cq"v: $typ => $body"
         }
 
-        Match(Ident(TermName("document")), cases)
+        Match(Ident(TermName("v")), cases)
       } getOrElse writeBodyConstruct(A)
 
       val result = c.Expr[BSONDocument](writer)
