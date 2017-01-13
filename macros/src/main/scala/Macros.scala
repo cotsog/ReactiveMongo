@@ -86,7 +86,8 @@ object Macros {
      * fully-qualified name.
      * @tparam Types to use in pattern matching. Listed in a "type list" \/
      */
-    trait SimpleUnionType[Types <: \/[_, _]] extends UnionType[Types] with SaveSimpleName with Default
+    trait SimpleUnionType[Types <: \/[_, _]]
+      extends UnionType[Types] with SaveSimpleName with Default
 
     /**
      * Type for making type-level lists for UnionType.
