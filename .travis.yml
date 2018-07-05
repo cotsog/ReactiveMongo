@@ -39,13 +39,13 @@ env:
 matrix: 
   exclude:
     - os: osx
-      CI_CATEGORY=INTEGRATION_TESTS
+      env: CI_CATEGORY=INTEGRATION_TESTS
     - os: osx
       scala: 2.11.12
-      CI_CATEGORY=UNIT_TESTS
+      env: CI_CATEGORY=UNIT_TESTS
     - os: linux
       scala: 2.12.6
-      CI_CATEGORY=UNIT_TESTS
+      env: CI_CATEGORY=UNIT_TESTS
     - scala: 2.11.12
       jdk: oraclejdk8
       env: CI_CATEGORY=UNIT_TESTS
